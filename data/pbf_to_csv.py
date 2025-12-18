@@ -119,12 +119,12 @@ with open("nodes.csv", "w", newline="", encoding="utf-8") as f:
             lat, lon, name = handler.all_nodes[node_id]
             writer.writerow([node_id, lat, lon, name])
 
-# Write edges with road names
+# Write edges with road names and traffic multiplier
 with open("edges.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
-    writer.writerow(["id", "node_ids", "road_name"])
+    writer.writerow(["id", "node_ids", "road_name", "traffic_multiplier"])
     for edge_id, segment, way_name in simplified_edges:
-        writer.writerow([edge_id, " ".join(map(str, segment)), way_name])
+        writer.writerow([edge_id, " ".join(map(str, segment)), way_name, 1.0])
 
 print("Done! Files created successfully.")
 print(f"Nodes: {len(used_nodes)}, Edges: {len(simplified_edges)}")

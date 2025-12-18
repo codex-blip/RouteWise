@@ -3,9 +3,9 @@
 using namespace std;
 
 struct PointLL {
+    int index;
     double lat;
     double lon;
-    int index;
 };
 
 struct KDNode {
