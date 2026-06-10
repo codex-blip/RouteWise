@@ -1,0 +1,23 @@
+# Node
+node_modules/
+.next/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+.next/
+node_modules/
+.vscode/
+
+.env
+.env.local
+*.env

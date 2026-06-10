@@ -1,0 +1,38 @@
+# Uber Clone - Backend Dependencies
+# Core framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-dotenv==1.0.0
+
+# Database - Async PostgreSQL
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# CORS & HTTP
+python-multipart==0.0.6
+
+# GeoJSON & spatial utilities (for Step 2 - spatial queries)
+# geoalchemy2==0.14.2  # TODO: Uncomment when implementing PostGIS spatial queries
+# shapely==2.0.2       # TODO: Uncomment when implementing geometry utilities
+
+# WebSocket & Real-time (for Step 2 - Socket.io/FastAPI WebSockets)
+# python-socketio==5.11.0  # TODO: Uncomment when implementing WebSocket events
+# websockets==12.0         # TODO: Uncomment when implementing driver location streaming
+
+# Payment processing (for Step 3 - Stripe integration)
+# stripe==7.10.0  # TODO: Uncomment when implementing payment processing
+
+# Development & testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# Type checking
+mypy==1.8.0
+types-sqlalchemy==1.4.53.38
