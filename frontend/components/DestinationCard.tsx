@@ -10,6 +10,12 @@ interface DestinationCardProps {
   onDropoffChange: (location: Location | undefined) => void;
   onRequestRide: () => void;
   onRoute?: (route: RouteResponse | null) => void;
+  rideStatusMessage?: string;
+  ridePhase?: 'idle' | 'driver_en_route' | 'waiting_for_otp' | 'in_trip' | 'completed';
+  otpValue?: string;
+  otpError?: string;
+  onOtpChange?: (value: string) => void;
+  onStartRide?: () => void;
 }
 
 export default function DestinationCard({
@@ -19,6 +25,12 @@ export default function DestinationCard({
   onDropoffChange,
   onRequestRide,
   onRoute,
+  rideStatusMessage,
+  ridePhase = 'idle',
+  otpValue = '',
+  otpError,
+  onOtpChange,
+  onStartRide,
 }: DestinationCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [pickupQuery, setPickupQuery] = useState('');
@@ -298,6 +310,46 @@ export default function DestinationCard({
             <div className="mt-3">
               <button onClick={handleRequestRide} className="w-full py-3.5 bg-black text-white font-semibold rounded-xl hover:bg-gray-800 active:bg-gray-900 transition-colors duration-200">Confirm Ride</button>
             </div>
+            {rideStatusMessage && (
+              <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                {rideStatusMessage}
+              </div>
+            )}
+
+            {ridePhase === 'waiting_for_otp' && (
+              <div className="mt-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">OTP verification</div>
+                <div className="mt-1 text-sm text-gray-700">Demo code: <span className="font-semibold text-gray-900">1234</span></div>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    value={otpValue}
+                    onChange={(e) => onOtpChange?.(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Enter OTP"
+                    className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                  />
+                  <button
+                    onClick={onStartRide}
+                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+                  >
+                    Start Ride
+                  </button>
+                </div>
+                {otpError && <div className="mt-2 text-sm text-red-600">{otpError}</div>}
+              </div>
+            )}
+
+            {ridePhase === 'in_trip' && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                Ride in progress. Follow the moving car on the map.
+              </div>
+            )}
+
+            {ridePhase === 'completed' && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                Trip completed.
+              </div>
+            )}
           </div>
         )}
       </div>

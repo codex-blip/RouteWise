@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.ws import router as websocket_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.base import async_engine
@@ -125,9 +126,8 @@ def create_application() -> FastAPI:
     # Mount API routes
     app.include_router(api_router)
 
-    # TODO Step 2: Mount WebSocket endpoint
-    # from app.api.websocket import websocket_endpoint
-    # app.add_websocket_route("/ws", websocket_endpoint)
+    # Native WebSocket endpoint(s)
+    app.include_router(websocket_router)
 
     # TODO Step 4: Add exception handlers for auth errors
     # from app.core.exceptions import auth_exception_handler

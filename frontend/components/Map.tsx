@@ -22,6 +22,7 @@ interface MapProps {
   pickup?: Location;
   dropoff?: Location;
   routePolyline?: string | undefined;
+  driverLocation?: Location | null;
 }
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -34,6 +35,7 @@ export default function Map({
   pickup,
   dropoff,
   routePolyline,
+  driverLocation,
 }: MapProps) {
   const mapRef = useRef<MapRef>(null);
 
@@ -135,6 +137,12 @@ export default function Map({
           </Marker>
         )}
 
+        {driverLocation && (
+          <Marker latitude={driverLocation.lat} longitude={driverLocation.lng} anchor="bottom" offset={[0, 0]}>
+            <DriverMarker />
+          </Marker>
+        )}
+
         {routeGeojson && (
           <Source id="route" type="geojson" data={routeGeojson}>
             <Layer
@@ -148,6 +156,8 @@ export default function Map({
             />
           </Source>
         )}
+
+        {/* TODO Step 4: Render and animate a car marker using streaming driver coordinates. */}
       </ReactMapGL>
     </div>
   );
@@ -180,6 +190,25 @@ function DropoffMarker() {
       </div>
       <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
         <span className="bg-black text-white text-xs px-2 py-0.5 rounded shadow">Dropoff</span>
+      </div>
+    </div>
+  );
+}
+
+function DriverMarker() {
+  return (
+    <div className="relative">
+      <div className="absolute -inset-3 rounded-full bg-black/20 animate-ping" />
+      <div className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black shadow-xl">
+        <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-4h16l1 4" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13v4h14v-4" />
+          <circle cx="7.5" cy="18.5" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="16.5" cy="18.5" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      </div>
+      <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="bg-black text-white text-xs px-2 py-0.5 rounded shadow">Car</span>
       </div>
     </div>
   );

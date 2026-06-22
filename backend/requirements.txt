@@ -16,6 +16,7 @@ email-validator==2.1.0
 
 # CORS & HTTP
 python-multipart==0.0.6
+polyline==2.0.2
 
 # GeoJSON & spatial utilities (for Step 2 - spatial queries)
 # geoalchemy2==0.14.2  # TODO: Uncomment when implementing PostGIS spatial queries

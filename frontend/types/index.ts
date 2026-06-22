@@ -96,6 +96,17 @@ export interface RouteResponse {
   estimated_fare: number;
 }
 
+export interface DriverLocation {
+  lat: number;
+  lng: number;
+}
+
+export interface RideStreamMessage {
+  lat?: number;
+  lng?: number;
+  status: 'EN_ROUTE' | 'ARRIVED';
+}
+
 export interface RideStatusUpdate {
   status: 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
   reason?: string;

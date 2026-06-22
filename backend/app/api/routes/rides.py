@@ -14,6 +14,7 @@ TODO Step 3: Add fare calculation and Stripe payment
 TODO Step 2: Add polyline route generation
 """
 from datetime import datetime
+import asyncio
 from typing import List
 from uuid import UUID
 
@@ -24,10 +25,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.logging import get_logger
 from app.models.ride import Ride, RideStatus
-from app.schemas.ride import RideRequest, RideResponse, RideStatusUpdate
+from app.schemas.ride import (
+    RideConfirmRequest,
+    RideConfirmResponse,
+    RideRequest,
+    RideResponse,
+    RideStatusUpdate,
+)
+from app.services.driver_simulation import simulate_driver_movement
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/rides", tags=["rides"])
+
+
+@router.post(
+    "/confirm",
+    response_model=RideConfirmResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Confirm ride and start simulation",
+    description="Schedules a background driver simulation that streams location updates over WebSocket.",
+)
+async def confirm_ride(ride: RideConfirmRequest) -> RideConfirmResponse:
+    """Trigger driver movement simulation in the background for a ride."""
+    asyncio.create_task(simulate_driver_movement(ride.ride_id, ride.encoded_polyline))
+
+    return RideConfirmResponse(
+        ride_id=ride.ride_id,
+        status="SIMULATION_STARTED",
+        detail="Driver simulation started",
+    )
 
 
 @router.post(

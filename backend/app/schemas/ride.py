@@ -98,6 +98,19 @@ class RideListResponse(BaseModel):
     page_size: int
 
 
+class RideConfirmRequest(BaseModel):
+    """Schema to confirm a ride and start driver simulation."""
+    ride_id: str = Field(..., min_length=1, max_length=128)
+    encoded_polyline: str = Field(..., min_length=1)
+
+
+class RideConfirmResponse(BaseModel):
+    """Schema returned after simulation is scheduled."""
+    ride_id: str
+    status: str
+    detail: str
+
+
 # TODO Step 2: WebSocket message schemas
 # class RideLocationUpdate(BaseModel):
 #     """Real-time driver location update (WebSocket)."""
