@@ -42,6 +42,15 @@ class RideStatus(str, PyEnum):
     CANCELLED = "cancelled"       # Ride was cancelled
 
 
+class PaymentStatus(str, PyEnum):
+    """Payment status enumeration."""
+    PENDING = "pending"
+    AUTHORIZED = "authorized"
+    CAPTURED = "captured"
+    REFUNDED = "refunded"
+    FAILED = "failed"
+
+
 class Ride(Base):
     """
     Ride model representing a complete ride request.
@@ -171,9 +180,18 @@ class Ride(Base):
         comment="Final fare after ride completion"
     )
 
-    # TODO Step 3: Payment fields
-    # payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    # stripe_payment_intent_id = Column(String(100), nullable=True)
+    # Payment fields
+    payment_status = Column(
+        Enum(PaymentStatus, name="payment_status_enum"),
+        nullable=False,
+        default=PaymentStatus.PENDING,
+        comment="Payment status: pending, authorized, captured, refunded, failed"
+    )
+    stripe_payment_intent_id = Column(
+        String(100),
+        nullable=True,
+        comment="Stripe PaymentIntent ID"
+    )
 
     # Cancellation tracking
     cancelled_by = Column(

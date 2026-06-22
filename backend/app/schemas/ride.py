@@ -70,8 +70,10 @@ class RideResponse(BaseModel):
     estimated_fare: Optional[float] = None
     final_fare: Optional[float] = None
 
-    # TODO Step 3: Payment
-    # payment_status: Optional[str] = None
+    # Payment fields
+    payment_status: Optional[str] = None
+    stripe_payment_intent_id: Optional[str] = None
+    client_secret: Optional[str] = None
 
     # Cancellation
     cancelled_by: Optional[str] = None
@@ -102,6 +104,8 @@ class RideConfirmRequest(BaseModel):
     """Schema to confirm a ride and start driver simulation."""
     ride_id: str = Field(..., min_length=1, max_length=128)
     encoded_polyline: str = Field(..., min_length=1)
+    pickup_lat: float = Field(..., ge=-90, le=90, description="Pickup latitude")
+    pickup_lng: float = Field(..., ge=-180, le=180, description="Pickup longitude")
 
 
 class RideConfirmResponse(BaseModel):

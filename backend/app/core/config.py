@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     mapbox_api_key: Optional[str] = None  # Server-side Mapbox token for geocoding/directions
 
     # Stripe (Step 3 - Payments)
-    # stripe_secret_key: Optional[str] = None        # TODO: Enable in Step 3
-    # stripe_webhook_secret: Optional[str] = None    # TODO: Enable in Step 3
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
 
     # Redis (Step 2 - Real-time features)
     # redis_url: Optional[str] = None  # TODO: Enable in Step 2

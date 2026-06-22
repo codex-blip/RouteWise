@@ -22,7 +22,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.models import Base, User, Ride
+from app.db.base import get_db
 from app.main import app
 
 # Test database URL (uses separate test database)
@@ -42,6 +43,20 @@ TestSessionLocal = sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+# Override dependency for tests
+async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with TestSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest_asyncio.fixture(scope="session")

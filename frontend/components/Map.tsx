@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import ReactMapGL, {
   Marker,
   NavigationControl,
@@ -28,6 +28,105 @@ interface MapProps {
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const MAP_STYLE = 'mapbox://styles/mapbox/streets-v12';
 
+function useSmoothLocation(targetLocation: Location | null | undefined, durationMs: number = 1000) {
+  const [interpolatedLocation, setInterpolatedLocation] = useState<Location | null>(null);
+  const [bearing, setBearing] = useState<number>(0);
+  const animRef = useRef<number | null>(null);
+
+  const currentPosRef = useRef<Location | null>(null);
+  const targetPosRef = useRef<Location | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!targetLocation) {
+      setInterpolatedLocation(null);
+      setBearing(0);
+      currentPosRef.current = null;
+      targetPosRef.current = null;
+      if (animRef.current) {
+        cancelAnimationFrame(animRef.current);
+        animRef.current = null;
+      }
+      return;
+    }
+
+    if (!currentPosRef.current) {
+      setInterpolatedLocation(targetLocation);
+      currentPosRef.current = targetLocation;
+      targetPosRef.current = targetLocation;
+      return;
+    }
+
+    targetPosRef.current = targetLocation;
+    startTimeRef.current = performance.now();
+
+    const startLat = currentPosRef.current.lat;
+    const startLng = currentPosRef.current.lng;
+    const targetLat = targetPosRef.current.lat;
+    const targetLng = targetPosRef.current.lng;
+
+    // Calculate bearing if moving significantly
+    const dLat = targetLat - startLat;
+    const dLng = targetLng - startLng;
+    if (Math.abs(dLat) > 0.000001 || Math.abs(dLng) > 0.000001) {
+      const lat1 = (startLat * Math.PI) / 180;
+      const lat2 = (targetLat * Math.PI) / 180;
+      const dLngRad = (dLng * Math.PI) / 180;
+
+      const y = Math.sin(dLngRad) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLngRad);
+      let brng = Math.atan2(y, x);
+      brng = (brng * 180) / Math.PI;
+      const newBearing = (brng + 360) % 360;
+      setBearing(newBearing);
+    }
+
+    const animate = (time: number) => {
+      if (!startTimeRef.current || !currentPosRef.current || !targetPosRef.current) return;
+
+      const elapsed = time - startTimeRef.current;
+      const progress = Math.min(elapsed / durationMs, 1.0);
+
+      const sLat = currentPosRef.current.lat;
+      const sLng = currentPosRef.current.lng;
+      const tLat = targetPosRef.current.lat;
+      const tLng = targetPosRef.current.lng;
+
+      const newLat = sLat + (tLat - sLat) * progress;
+      const newLng = sLng + (tLng - sLng) * progress;
+
+      setInterpolatedLocation({
+        lat: newLat,
+        lng: newLng,
+        address: targetPosRef.current.address,
+      });
+
+      if (progress < 1.0) {
+        animRef.current = requestAnimationFrame(animate);
+      } else {
+        currentPosRef.current = targetPosRef.current;
+        animRef.current = null;
+      }
+    };
+
+    if (animRef.current) {
+      cancelAnimationFrame(animRef.current);
+    }
+    if (interpolatedLocation) {
+      currentPosRef.current = interpolatedLocation;
+    }
+    animRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animRef.current) {
+        cancelAnimationFrame(animRef.current);
+      }
+    };
+  }, [targetLocation, durationMs]);
+
+  return { location: interpolatedLocation, bearing };
+}
+
 export default function Map({
   viewport,
   onViewportChange,
@@ -38,6 +137,7 @@ export default function Map({
   driverLocation,
 }: MapProps) {
   const mapRef = useRef<MapRef>(null);
+  const smoothDriver = useSmoothLocation(driverLocation, 1000);
 
   const handleClick = useCallback(
     (event: mapboxgl.MapMouseEvent) => {
@@ -137,9 +237,9 @@ export default function Map({
           </Marker>
         )}
 
-        {driverLocation && (
-          <Marker latitude={driverLocation.lat} longitude={driverLocation.lng} anchor="bottom" offset={[0, 0]}>
-            <DriverMarker />
+        {smoothDriver.location && (
+          <Marker latitude={smoothDriver.location.lat} longitude={smoothDriver.location.lng} anchor="bottom" offset={[0, 0]}>
+            <DriverMarker bearing={smoothDriver.bearing} />
           </Marker>
         )}
 
@@ -195,11 +295,14 @@ function DropoffMarker() {
   );
 }
 
-function DriverMarker() {
+function DriverMarker({ bearing = 0 }: { bearing?: number }) {
   return (
     <div className="relative">
       <div className="absolute -inset-3 rounded-full bg-black/20 animate-ping" />
-      <div className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black shadow-xl">
+      <div 
+        className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black shadow-xl"
+        style={{ transform: `rotate(${bearing}deg)`, transition: 'transform 0.15s ease-out' }}
+      >
         <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-4h16l1 4" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13v4h14v-4" />

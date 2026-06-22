@@ -20,8 +20,13 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { decode } from '@mapbox/polyline';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import StripePaymentForm from '@/components/StripePaymentForm';
 import DestinationCard from '@/components/DestinationCard';
 import type { DriverLocation, Location, MapViewport, RideStreamMessage, RouteResponse } from '@/types';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_51MockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKeyMockKey00MockKeyMockKey');
 
 // Dynamically import Map component to avoid SSR issues with Mapbox
 // Mapbox requires window object which is not available during SSR
@@ -58,6 +63,9 @@ export default function HomePage() {
   const [ridePhase, setRidePhase] = useState<RidePhase>('idle');
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState<string | null>(null);
+
+  // Stripe Payment State
+  const [paymentIntentData, setPaymentIntentData] = useState<{ clientSecret: string; amount: number; rideId: string } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const tripAnimationRef = useRef<number | null>(null);
@@ -136,25 +144,74 @@ export default function HomePage() {
     if (!pickup || !dropoff || !route?.encoded_polyline) return;
 
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const wsBase = base.replace(/^http/, 'ws').replace(/\/$/, '');
-    const rideId = crypto.randomUUID();
+    setRideStatusMessage('Initializing ride request...');
+    setOtpInput('');
+    setOtpError(null);
 
+    try {
+      // Step 1: Initialize ride request in backend (calculates fare and generates PaymentIntent)
+      const res = await fetch(`${base}/api/v1/rides`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pickup: {
+            lat: pickup.lat,
+            lng: pickup.lng,
+            address: pickup.address,
+          },
+          dropoff: {
+            lat: dropoff.lat,
+            lng: dropoff.lng,
+            address: dropoff.address,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to request ride');
+      }
+
+      const rideResponse = await res.json();
+      console.log('Ride requested successfully:', rideResponse);
+
+      // Step 2: Display the Stripe checkout modal
+      setPaymentIntentData({
+        clientSecret: rideResponse.client_secret || `pi_mock_${crypto.randomUUID().replaceAll('-', '')}`,
+        amount: Math.round((rideResponse.estimated_fare || 15.0) * 100),
+        rideId: rideResponse.id,
+      });
+
+    } catch (err) {
+      console.error('Requesting ride failed:', err);
+      setRideStatusMessage('Failed to initialize ride request. Please try again.');
+    }
+  }, [pickup, dropoff, route]);
+
+  const handlePaymentSuccess = useCallback(async (paymentIntentId: string) => {
+    if (!paymentIntentData || !pickup || !dropoff || !route?.encoded_polyline) return;
+
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const wsBase = base.replace(/^http/, 'ws').replace(/\/$/, '');
+    const { rideId } = paymentIntentData;
+
+    setPaymentIntentData(null);
     disconnectRideSocket();
     setActiveRideId(rideId);
     setDriverLocation(null);
     setVehicleLocation(null);
-    setOtpInput('');
-    setOtpError(null);
-    setRideStatusMessage('Driver is on the way...');
+    setRideStatusMessage('Payment authorized! Driver is on the way...');
     setRidePhase('driver_en_route');
 
     try {
+      // Step 3: Trigger driver simulation to pickup
       const res = await fetch(`${base}/api/v1/rides/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ride_id: rideId,
           encoded_polyline: route.encoded_polyline,
+          pickup_lat: pickup.lat,
+          pickup_lng: pickup.lng,
         }),
       });
 
@@ -176,14 +233,14 @@ export default function HomePage() {
             typeof message.lng === 'number'
           ) {
             setDriverLocation({ lat: message.lat, lng: message.lng });
-              setVehicleLocation({ lat: message.lat, lng: message.lng });
+            setVehicleLocation({ lat: message.lat, lng: message.lng });
             return;
           }
 
           if (message.status === 'ARRIVED') {
-              setRideStatusMessage('Driver arrived. Enter OTP to start the ride.');
-              setRidePhase('waiting_for_otp');
-              setVehicleLocation((current) => current || driverLocation);
+            setRideStatusMessage('Driver arrived. Enter OTP to start the ride.');
+            setRidePhase('waiting_for_otp');
+            setVehicleLocation((current) => current || driverLocation);
             disconnectRideSocket();
           }
         } catch (err) {
@@ -199,11 +256,35 @@ export default function HomePage() {
         wsRef.current = null;
       };
     } catch (err) {
-      console.error('Requesting ride failed:', err);
-      setRideStatusMessage('Failed to start ride simulation. Please try again.');
+      console.error('Confirming ride failed:', err);
+      setRideStatusMessage('Failed to start driver simulation. Please try again.');
       disconnectRideSocket();
     }
-  }, [pickup, dropoff, route, disconnectRideSocket, driverLocation]);
+  }, [paymentIntentData, pickup, dropoff, route, disconnectRideSocket, driverLocation]);
+
+  const handlePaymentCancel = useCallback(async () => {
+    if (!paymentIntentData) return;
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const { rideId } = paymentIntentData;
+
+    setPaymentIntentData(null);
+    setRideStatusMessage('Ride cancelled.');
+    setRidePhase('idle');
+
+    try {
+      await fetch(`${base}/api/v1/rides/${rideId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'cancelled',
+          reason: 'User cancelled during payment authorization',
+          cancelled_by: 'rider',
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to cancel ride in backend:', err);
+    }
+  }, [paymentIntentData]);
 
   const handleStartRide = useCallback(() => {
     const expectedOtp = '1234';
@@ -212,7 +293,7 @@ export default function HomePage() {
       return;
     }
 
-    if (!routeCoordinates.length) {
+    if (!routeCoordinates.length || !activeRideId) {
       setOtpError('Route is missing. Please select a destination again.');
       return;
     }
@@ -220,6 +301,14 @@ export default function HomePage() {
     setOtpError(null);
     setRidePhase('in_trip');
     setRideStatusMessage('Ride started. Heading to destination...');
+
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Set status to in_progress in backend
+    fetch(`${base}/api/v1/rides/${activeRideId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'in_progress' }),
+    }).catch((err) => console.error('Failed to start ride on backend:', err));
 
     clearTripAnimation();
     let index = 0;
@@ -232,12 +321,19 @@ export default function HomePage() {
         setRidePhase('completed');
         setRideStatusMessage('You have arrived at your destination.');
         setVehicleLocation(routeCoordinates[routeCoordinates.length - 1] || null);
+
+        // Set status to completed in backend to trigger Stripe capture
+        fetch(`${base}/api/v1/rides/${activeRideId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'completed' }),
+        }).catch((err) => console.error('Failed to complete ride on backend:', err));
         return;
       }
 
       setVehicleLocation(routeCoordinates[index]);
     }, 1000);
-  }, [clearTripAnimation, otpInput, routeCoordinates]);
+  }, [clearTripAnimation, otpInput, routeCoordinates, activeRideId]);
 
   useEffect(() => {
     return () => {
@@ -304,6 +400,18 @@ export default function HomePage() {
 
       {/* TODO Step 4: User profile button */}
       {/* <ProfileButton /> */}
+
+      {/* Stripe Checkout Modal Overlay */}
+      {paymentIntentData && (
+        <Elements stripe={stripePromise}>
+          <StripePaymentForm
+            clientSecret={paymentIntentData.clientSecret}
+            amount={paymentIntentData.amount}
+            onSuccess={handlePaymentSuccess}
+            onCancel={handlePaymentCancel}
+          />
+        </Elements>
+      )}
     </main>
   );
 }

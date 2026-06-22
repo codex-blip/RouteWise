@@ -33,6 +33,9 @@ from app.schemas.ride import (
     RideStatusUpdate,
 )
 from app.services.driver_simulation import simulate_driver_movement
+from app.services.navigation import mapbox_route, calculate_fare
+from app.services.stripe import stripe_service
+from app.models.ride import PaymentStatus
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/rides", tags=["rides"])
@@ -47,7 +50,14 @@ router = APIRouter(prefix="/rides", tags=["rides"])
 )
 async def confirm_ride(ride: RideConfirmRequest) -> RideConfirmResponse:
     """Trigger driver movement simulation in the background for a ride."""
-    asyncio.create_task(simulate_driver_movement(ride.ride_id, ride.encoded_polyline))
+    asyncio.create_task(
+        simulate_driver_movement(
+            ride_id=ride.ride_id,
+            encoded_polyline=ride.encoded_polyline,
+            pickup_lat=ride.pickup_lat,
+            pickup_lng=ride.pickup_lng,
+        )
+    )
 
     return RideConfirmResponse(
         ride_id=ride.ride_id,
@@ -92,6 +102,41 @@ async def request_ride(
     # rider_id = UUID(current_user["id"])
     rider_id = UUID("00000000-0000-0000-0000-000000000001")  # Mock for now
 
+    # Calculate actual route metrics using Mapbox Directions API
+    try:
+        route_data = await mapbox_route(
+            pickup_lat=ride_data.pickup.lat,
+            pickup_lng=ride_data.pickup.lng,
+            dropoff_lat=ride_data.dropoff.lat,
+            dropoff_lng=ride_data.dropoff.lng,
+        )
+        distance = route_data["distance"]  # meters
+        duration = route_data["duration"]  # seconds
+        encoded_polyline = route_data["encoded_polyline"]
+        estimated_fare = calculate_fare(distance, duration)
+    except Exception:
+        logger.exception("Failed to calculate route metrics for ride request, using defaults")
+        distance = 0.0
+        duration = 0.0
+        encoded_polyline = None
+        estimated_fare = 15.0  # default fallback fare in USD
+
+    # Create Stripe PaymentIntent with manual capture (pre-authorization)
+    amount_cents = int(estimated_fare * 100)
+    client_secret = None
+    stripe_intent_id = None
+    payment_status = PaymentStatus.PENDING
+
+    if amount_cents > 0:
+        try:
+            intent = await stripe_service.create_payment_intent(amount_cents, "usd")
+            stripe_intent_id = intent["id"]
+            client_secret = intent["client_secret"]
+            payment_status = PaymentStatus.AUTHORIZED
+        except Exception:
+            logger.exception("Failed to pre-authorize fare with Stripe")
+            payment_status = PaymentStatus.FAILED
+
     ride = Ride(
         rider_id=rider_id,
         status=RideStatus.REQUESTED,
@@ -101,13 +146,20 @@ async def request_ride(
         dropoff_lat=ride_data.dropoff.lat,
         dropoff_lng=ride_data.dropoff.lng,
         dropoff_address=ride_data.dropoff.address,
-        # TODO Step 3: Calculate actual fare
-        estimated_fare=0.0,  # Placeholder
+        estimated_fare=estimated_fare,
+        distance=distance,
+        duration=duration,
+        encoded_polyline=encoded_polyline,
+        payment_status=payment_status,
+        stripe_payment_intent_id=stripe_intent_id,
     )
 
     db.add(ride)
     await db.commit()
     await db.refresh(ride)
+
+    # Attach client secret dynamically to response object (not saved in database)
+    ride.client_secret = client_secret
 
     logger.info(f"Ride requested: {ride.id} by rider {rider_id}")
 
@@ -269,14 +321,24 @@ async def update_ride_status(
         ride.started_at = now
     elif new_status == RideStatus.COMPLETED:
         ride.completed_at = now
-        # TODO Step 3: Capture payment via Stripe
-        # ride.final_fare = ride.estimated_fare
-        # await stripe_service.capture_payment(ride.stripe_payment_intent_id)
+        ride.final_fare = ride.estimated_fare
+        if ride.stripe_payment_intent_id:
+            try:
+                await stripe_service.capture_payment_intent(ride.stripe_payment_intent_id)
+                ride.payment_status = PaymentStatus.CAPTURED
+            except Exception:
+                logger.exception("Failed to capture Stripe payment for completed ride %s", ride_id)
+                ride.payment_status = PaymentStatus.FAILED
     elif new_status == RideStatus.CANCELLED:
         ride.cancelled_at = now
         ride.cancelled_by = status_update.cancelled_by or "rider"
         ride.cancellation_reason = status_update.reason
-        # TODO Step 3: Refund/cancel Stripe PaymentIntent
+        if ride.stripe_payment_intent_id:
+            try:
+                await stripe_service.cancel_payment_intent(ride.stripe_payment_intent_id)
+                ride.payment_status = PaymentStatus.REFUNDED
+            except Exception:
+                logger.exception("Failed to void Stripe payment for cancelled ride %s", ride_id)
 
     await db.commit()
     await db.refresh(ride)
