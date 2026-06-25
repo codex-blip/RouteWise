@@ -1,6 +1,6 @@
-# 📍 RouteWise (Uber Clone MVP)
+# 📍 RouteWise 
 
-RouteWise is a modern, high-performance Uber Clone MVP designed to demonstrate the complete ride-hailing lifecycle. Built with a robust backend using **FastAPI** and an interactive, real-time frontend using **Next.js** and **Mapbox**, RouteWise implements the core pillars of a ride-sharing service: user roles, geocoding and routing, payment pre-authorization, real-time driver tracking, and trip lifecycle management.
+RouteWise is a modern, high-performance website designed to demonstrate the complete ride-hailing lifecycle. Built with a robust backend using **FastAPI** and an interactive, real-time frontend using **Next.js** and **Mapbox**, RouteWise implements the core pillars of a ride-sharing service: user roles, geocoding and routing, payment pre-authorization, real-time driver tracking, and trip lifecycle management.
 
 ---
 
