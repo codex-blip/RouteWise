@@ -3,10 +3,15 @@ Application configuration using Pydantic Settings.
 Provides centralized, type-safe access to all environment variables.
 """
 from functools import lru_cache
+import socket
 from typing import List, Optional
 
-from pydantic import PostgresDsn, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+
+
+DEFAULT_DATABASE_URL = "postgresql+asyncpg://postgres:123@localhost:5432/uber_clone"
 
 
 class Settings(BaseSettings):
@@ -32,7 +37,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     # Database - Async PostgreSQL connection string
-    database_url: PostgresDsn = "postgresql+asyncpg://postgres:123@localhost:5432/uber_clone"
+    database_url: str = DEFAULT_DATABASE_URL
 
     # JWT Authentication (Step 4)
     # jwt_secret_key: Optional[str] = None  # TODO: Enable in Step 4
@@ -57,6 +62,34 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"environment must be one of {allowed}")
         return v
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def validate_database_url(cls, v: object) -> str:
+        """Normalize the database URL and fall back to the local dev database when needed."""
+        if v is None:
+            return DEFAULT_DATABASE_URL
+
+        url_value = str(v).strip().strip('"').strip("'")
+        if not url_value:
+            return DEFAULT_DATABASE_URL
+
+        try:
+            parsed_url = make_url(url_value)
+        except Exception:
+            return DEFAULT_DATABASE_URL
+
+        if parsed_url.drivername == "postgresql":
+            parsed_url = parsed_url.set(drivername="postgresql+asyncpg")
+
+        host = parsed_url.host
+        if host and host not in {"localhost", "127.0.0.1", "::1"}:
+            try:
+                socket.gethostbyname(host)
+            except OSError:
+                return DEFAULT_DATABASE_URL
+
+        return str(parsed_url)
 
     @property
     def is_development(self) -> bool:

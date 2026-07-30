@@ -154,48 +154,19 @@ export default function HomePage() {
   const handleRequestRide = useCallback(async () => {
     if (!pickup || !dropoff || !route?.encoded_polyline) return;
 
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    setRideStatusMessage('Initializing ride request...');
+    const rideId = crypto.randomUUID();
+    const estimatedFare = route.estimated_fare || 15;
+    setRideStatusMessage('Preparing ride authorization...');
     setOtpInput('');
     setOtpError(null);
 
-    try {
-      // Step 1: Initialize ride request in backend (calculates fare and generates PaymentIntent)
-      const res = await fetch(`${base}/api/v1/rides`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pickup: {
-            lat: pickup.lat,
-            lng: pickup.lng,
-            address: pickup.address,
-          },
-          dropoff: {
-            lat: dropoff.lat,
-            lng: dropoff.lng,
-            address: dropoff.address,
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to request ride');
-      }
-
-      const rideResponse = await res.json();
-      console.log('Ride requested successfully:', rideResponse);
-
-      // Step 2: Display the Stripe checkout modal
-      setPaymentIntentData({
-        clientSecret: rideResponse.client_secret || `pi_mock_${crypto.randomUUID().replaceAll('-', '')}`,
-        amount: Math.round((rideResponse.estimated_fare || 15.0) * 100),
-        rideId: rideResponse.id,
-      });
-
-    } catch (err) {
-      console.error('Requesting ride failed:', err);
-      setRideStatusMessage('Failed to initialize ride request. Please try again.');
-    }
+    // Demo-only flow: use a mock authorization so we don't depend on the DB-backed
+    // POST /rides endpoint before the driver simulation starts.
+    setPaymentIntentData({
+      clientSecret: `pi_mock_${rideId.replaceAll('-', '')}`,
+      amount: Math.round(estimatedFare * 100),
+      rideId,
+    });
   }, [pickup, dropoff, route]);
 
   const handlePaymentSuccess = useCallback(async (paymentIntentId: string) => {
